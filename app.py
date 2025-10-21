@@ -117,7 +117,7 @@ class AdvancedLinkedInScraper:
         params = {'keywords': keywords, 'location': location, 'start': 0}
         
         jobs_collected = 0
-        max_pages = min(max_results // 7, 10)
+        max_pages = min(max_results // 7, 7)
         
         for page in range(max_pages):
             try:
@@ -161,7 +161,7 @@ class AdvancedLinkedInScraper:
         params = {'keywords': keywords, 'location': location, 'start': 0}
         
         jobs_collected = 0
-        max_pages = min(max_results // 7, 20)
+        max_pages = min(max_results // 7, 7)
         
         for page in range(max_pages):
             try:
