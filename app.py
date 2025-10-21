@@ -518,6 +518,22 @@ class AdvancedLinkedInScraper:
         
         logger.info(f"Saved {len(self.jobs_data)} jobs to {filename}")
 
+# Error handlers for better JSON responses
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"500 error: {error}")
+    return jsonify({
+        'success': False,
+        'message': 'Internal server error'
+    }), 500
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({
+        'success': False,
+        'message': 'Endpoint not found'
+    }), 404
+
 # Flask Routes
 @app.route('/')
 def index():
@@ -526,46 +542,60 @@ def index():
 @app.route('/search', methods=['POST'])
 def search_jobs():
     try:
+        # Get form data with safe defaults
         keywords = request.form.get('keywords', '').strip()
         location = request.form.get('location', '').strip()
-        max_results = int(request.form.get('max_results', 50))
+        
+        try:
+            max_results = int(request.form.get('max_results', 50))
+        except (ValueError, TypeError):
+            max_results = 50
+            
         use_auth = request.form.get('use_auth') == 'on'
         session_cookie = request.form.get('session_cookie', '').strip()
         
+        logger.info(f"Search request received - Keywords: '{keywords}', Location: '{location}'")
+        
         # Input validation
         if not keywords:
+            logger.warning("Empty keywords received")
             return jsonify({
                 'success': False,
                 'message': "Please enter job keywords to search."
             })
         
-        if max_results > 100:  # Limit for demo
-            max_results = 100
+        # Limit max results for demo
+        if max_results > 50:
+            max_results = 50
         
-        logger.info(f"Starting job search: keywords='{keywords}', location='{location}'")
-        
+        # Initialize scraper
         scraper = AdvancedLinkedInScraper(
             session_cookie=session_cookie if use_auth else None
         )
         
-        # Use appropriate search method
+        # Perform search
+        logger.info("Starting job search...")
         if use_auth and session_cookie:
             jobs = scraper.search_jobs_authenticated(keywords, location, max_results)
         else:
             jobs = scraper.search_jobs_public_api(keywords, location, max_results)
         
         if not jobs:
+            logger.info("No jobs found for search")
             return jsonify({
                 'success': False,
                 'message': "No jobs found. Try different keywords or location."
             })
         
         # Enrich jobs with details
-        successful_details = scraper.enrich_jobs_with_details(max_details=min(20, len(jobs)))
+        logger.info(f"Enriching {len(jobs)} jobs with details")
+        successful_details = scraper.enrich_jobs_with_details(max_details=min(15, len(jobs)))
         
+        # Analyze data
         skills_freq = scraper.analyze_skills_frequency()
         geo_trends = scraper.analyze_geographic_trends()
         
+        # Generate filenames
         session_id = str(uuid.uuid4())[:8]
         json_filename = f"linkedin_jobs_{session_id}.json"
         csv_filename = f"linkedin_jobs_{session_id}.csv"
@@ -574,28 +604,17 @@ def search_jobs():
         db_success = scraper.save_to_database(session_id, keywords, location, max_results, use_auth)
         
         # Save to files
-        scraper.save_to_json(json_filename)
-        scraper.save_to_csv(csv_filename)
+        try:
+            scraper.save_to_json(json_filename)
+            scraper.save_to_csv(csv_filename)
+        except Exception as file_error:
+            logger.error(f"File save error: {file_error}")
+            # Continue even if file save fails
         
-        # Convert jobs data to JSON-serializable format
-        serializable_jobs = []
-        for job in scraper.jobs_data:
-            serializable_job = job.copy()
-            if 'scraped_at' in serializable_job and isinstance(serializable_job['scraped_at'], datetime):
-                serializable_job['scraped_at'] = serializable_job['scraped_at'].isoformat()
-            serializable_jobs.append(serializable_job)
-        
-        # Store in session
-        session['jobs_data'] = serializable_jobs
-        session['skills_freq'] = skills_freq
-        session['geo_trends'] = geo_trends
-        session['json_filename'] = json_filename
-        session['csv_filename'] = csv_filename
-        session['session_id'] = session_id
-        
-        return jsonify({
+        # Prepare response data
+        response_data = {
             'success': True,
-            'message': f"Found {len(jobs)} job listings for '{keywords}' in '{location}' ({successful_details} with details)",
+            'message': f"Found {len(jobs)} job listings for '{keywords}' in '{location}'",
             'jobs_count': len(jobs),
             'jobs_with_details': successful_details,
             'top_skills': skills_freq[:10],
@@ -603,14 +622,18 @@ def search_jobs():
             'json_filename': json_filename,
             'csv_filename': csv_filename,
             'db_success': db_success
-        })
+        }
+        
+        logger.info(f"Search completed successfully. Jobs found: {len(jobs)}")
+        return jsonify(response_data)
         
     except Exception as e:
-        logger.error(f"Error in search_jobs: {e}")
+        logger.error(f"Error in search_jobs: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({
             'success': False,
-            'message': f"An error occurred: {str(e)}"
-        })
+            'message': f"An error occurred during search: {str(e)}"
+        }), 500
 
 @app.route('/results')
 def results():
@@ -681,6 +704,15 @@ def health_check():
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
         'database': 'SQLite'
+    })
+
+@app.route('/test')
+def test_endpoint():
+    """Test endpoint to verify server is working"""
+    return jsonify({
+        'success': True,
+        'message': 'Server is running correctly',
+        'timestamp': datetime.now().isoformat()
     })
 
 if __name__ == "__main__":

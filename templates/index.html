@@ -136,7 +136,7 @@
                             <i class="fas fa-database"></i>
                         </div>
                         <h5>Database Storage</h5>
-                        <p>All data stored securely in MySQL database for future analysis</p>
+                        <p>All data stored securely in SQLite database for future analysis</p>
                     </div>
                 </div>
             </div>
@@ -165,7 +165,8 @@
                         <div class="col-md-6 mb-3">
                             <label for="max_results" class="form-label">Max Results</label>
                             <input type="number" class="form-control" id="max_results" name="max_results" 
-                                   value="50" min="10" max="200">
+                                   value="50" min="10" max="50">
+                            <div class="form-text">Limited to 50 for demo purposes</div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="industry" class="form-label">Industry (Optional)</label>
@@ -249,7 +250,7 @@
                         </div>
                     </div>
                     
-                    <div class="d-flex gap-2">
+                    <div class="d-flex gap-2 flex-wrap">
                         <a id="json-download" href="#" class="btn btn-outline-primary">
                             <i class="fas fa-file-code me-2"></i>Download JSON
                         </a>
@@ -265,7 +266,7 @@
         </div>
     </div>
 
-    <!-- Fixed Script -->
+    <!-- Fixed Script with Better Error Handling -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             let skillsChartInstance = null;
@@ -284,80 +285,149 @@
                 const resultsSection = document.getElementById('results');
                 const loadingIndicator = document.getElementById('loading');
 
+                // Show loading, hide results
                 loadingIndicator.style.display = 'block';
                 resultsSection.classList.add('d-none');
+                
+                // Clear previous charts
+                if (skillsChartInstance) {
+                    skillsChartInstance.destroy();
+                    skillsChartInstance = null;
+                }
+                if (locationsChartInstance) {
+                    locationsChartInstance.destroy();
+                    locationsChartInstance = null;
+                }
+
+                // Add timeout handling
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
 
                 fetch('/search', {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    signal: controller.signal
                 })
-                .then(response => response.json())
+                .then(response => {
+                    clearTimeout(timeoutId);
+                    
+                    // Check if response is OK
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    // Check if response has content
+                    const contentLength = response.headers.get('content-length');
+                    if (contentLength === '0') {
+                        throw new Error('Empty response from server');
+                    }
+                    
+                    return response.json();
+                })
                 .then(data => {
                     loadingIndicator.style.display = 'none';
 
                     if (data.success) {
+                        // Update stats
                         document.getElementById('jobs-count').textContent = data.jobs_count;
-                        document.getElementById('top-skills-count').textContent = data.top_skills.length;
-                        document.getElementById('top-locations-count').textContent = data.top_locations.length;
+                        document.getElementById('top-skills-count').textContent = data.top_skills ? data.top_skills.length : 0;
+                        document.getElementById('top-locations-count').textContent = data.top_locations ? data.top_locations.length : 0;
 
-                        if (skillsChartInstance) skillsChartInstance.destroy();
-                        if (locationsChartInstance) locationsChartInstance.destroy();
-
-                        skillsChartInstance = new Chart(
-                            document.getElementById('skillsChart').getContext('2d'),
-                            {
-                                type: 'bar',
-                                data: {
-                                    labels: data.top_skills.map(item => item[0]),
-                                    datasets: [{
-                                        label: 'Top Skills',
-                                        data: data.top_skills.map(item => item[1]),
-                                        backgroundColor: '#0077b5',
-                                        borderColor: '#004471',
-                                        borderWidth: 1
-                                    }]
-                                },
-                                options: {
-                                    responsive: true,
-                                    maintainAspectRatio: false,
-                                    scales: { y: { beginAtZero: true } }
+                        // Create skills chart if we have data
+                        if (data.top_skills && data.top_skills.length > 0) {
+                            skillsChartInstance = new Chart(
+                                document.getElementById('skillsChart').getContext('2d'),
+                                {
+                                    type: 'bar',
+                                    data: {
+                                        labels: data.top_skills.map(item => item[0]),
+                                        datasets: [{
+                                            label: 'Top Skills',
+                                            data: data.top_skills.map(item => item[1]),
+                                            backgroundColor: '#0077b5',
+                                            borderColor: '#004471',
+                                            borderWidth: 1
+                                        }]
+                                    },
+                                    options: {
+                                        responsive: true,
+                                        maintainAspectRatio: false,
+                                        scales: { 
+                                            y: { 
+                                                beginAtZero: true,
+                                                ticks: {
+                                                    precision: 0
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
-                            }
-                        );
+                            );
+                        } else {
+                            document.getElementById('skills-chart').innerHTML = '<p class="text-muted">No skills data available</p>';
+                        }
 
-                        locationsChartInstance = new Chart(
-                            document.getElementById('locationsChart').getContext('2d'),
-                            {
-                                type: 'bar',
-                                data: {
-                                    labels: data.top_locations.map(item => item[0]),
-                                    datasets: [{
-                                        label: 'Top Locations',
-                                        data: data.top_locations.map(item => item[1]),
-                                        backgroundColor: '#0077b5',
-                                        borderColor: '#004471',
-                                        borderWidth: 1
-                                    }]
-                                },
-                                options: {
-                                    responsive: true,
-                                    maintainAspectRatio: false,
-                                    scales: { y: { beginAtZero: true } }
+                        // Create locations chart if we have data
+                        if (data.top_locations && data.top_locations.length > 0) {
+                            locationsChartInstance = new Chart(
+                                document.getElementById('locationsChart').getContext('2d'),
+                                {
+                                    type: 'bar',
+                                    data: {
+                                        labels: data.top_locations.map(item => item[0]),
+                                        datasets: [{
+                                            label: 'Top Locations',
+                                            data: data.top_locations.map(item => item[1]),
+                                            backgroundColor: '#0077b5',
+                                            borderColor: '#004471',
+                                            borderWidth: 1
+                                        }]
+                                    },
+                                    options: {
+                                        responsive: true,
+                                        maintainAspectRatio: false,
+                                        scales: { 
+                                            y: { 
+                                                beginAtZero: true,
+                                                ticks: {
+                                                    precision: 0
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
-                            }
-                        );
+                            );
+                        } else {
+                            document.getElementById('locations-chart').innerHTML = '<p class="text-muted">No location data available</p>';
+                        }
 
-                        document.getElementById('json-download').href = '/download/' + data.json_filename;
-                        document.getElementById('csv-download').href = '/download/' + data.csv_filename;
+                        // Update download links
+                        if (data.json_filename) {
+                            document.getElementById('json-download').href = '/download/' + data.json_filename;
+                        }
+                        if (data.csv_filename) {
+                            document.getElementById('csv-download').href = '/download/' + data.csv_filename;
+                        }
 
+                        // Show results
                         resultsSection.classList.remove('d-none');
                     } else {
-                        alert('Error: ' + data.message);
+                        alert('Error: ' + (data.message || 'Unknown error occurred'));
                     }
                 })
                 .catch(error => {
+                    clearTimeout(timeoutId);
                     loadingIndicator.style.display = 'none';
-                    alert('An error occurred: ' + error);
+                    
+                    if (error.name === 'AbortError') {
+                        alert('Request timed out. The search is taking too long. Please try with fewer results or different keywords.');
+                    } else if (error.name === 'SyntaxError') {
+                        alert('Server returned invalid response. Please try again or check the server logs.');
+                    } else {
+                        alert('Network error: ' + error.message);
+                    }
+                    
+                    console.error('Fetch error:', error);
                 });
             });
         });
