@@ -165,8 +165,8 @@
                         <div class="col-md-6 mb-3">
                             <label for="max_results" class="form-label">Max Results</label>
                             <input type="number" class="form-control" id="max_results" name="max_results" 
-                                   value="50" min="10" max="50">
-                            <div class="form-text">Limited to 50 for demo purposes</div>
+                                   value="30" min="10" max="30">
+                            <div class="form-text">Limited to 30 for stability</div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="industry" class="form-label">Industry (Optional)</label>
@@ -204,7 +204,8 @@
                     <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
-                    <p class="mt-2">Searching LinkedIn jobs... This may take a few minutes.</p>
+                    <p class="mt-2">Searching LinkedIn jobs... This may take a minute.</p>
+                    <p class="small text-muted">Fetching details for 7 jobs to ensure stability</p>
                 </div>
             </div>
         </div>

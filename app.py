@@ -106,8 +106,9 @@ class AdvancedLinkedInScraper:
             logger.info("Session cookie set for authenticated access")
             
         self.jobs_data = []
-        self.rate_limit_delay = random.uniform(2, 5)
-        self.request_timeout = 30
+        self.rate_limit_delay = random.uniform(2, 4)  # Reduced from 2-5
+        self.request_timeout = 20  # Reduced from 30
+        self.start_time = datetime.now()  # Track start time
 
     def search_jobs_public_api(self, keywords, location=None, max_results=50):
         """Search using LinkedIn's public API"""
@@ -275,44 +276,60 @@ class AdvancedLinkedInScraper:
             return None
 
     def get_job_details(self, job_url):
-        """Get detailed job information"""
+        """Get detailed job information with timeout handling"""
         try:
             if not job_url:
                 return {}
                 
             logger.info(f"Fetching job details from: {job_url[:100]}...")
             
-            response = self.session.get(job_url, timeout=self.request_timeout)
+            # Set shorter timeout for job details
+            detail_timeout = 15  # 15 seconds max per job detail
+            
+            response = self.session.get(job_url, timeout=detail_timeout)
             response.raise_for_status()
             
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Get job description
+            # Get job description with multiple fallback selectors
             description = ""
-            description_div = soup.find('div', class_='description__text')
-            if description_div:
-                description = description_div.get_text(separator='\n').strip()
+            description_selectors = [
+                'div.description__text',
+                'section.description',
+                'div.description',
+                'div.job-details',
+                'div.job-description'
+            ]
             
-            # Try alternative selectors
-            if not description:
-                desc_sections = soup.find_all('section', class_='description')
-                for section in desc_sections:
-                    description = section.get_text(separator='\n').strip()
+            for selector in description_selectors:
+                desc_elem = soup.select_one(selector)
+                if desc_elem:
+                    description = desc_elem.get_text(separator='\n').strip()
                     if description:
                         break
+            
+            # If still no description, try to get any text content
+            if not description:
+                main_content = soup.find('main') or soup.find('body')
+                if main_content:
+                    # Get text but limit length
+                    description = main_content.get_text(separator='\n').strip()[:2000]
             
             skills = self._extract_skills_from_text(description)
             industry = self._extract_industry(soup)
             
             return {
-                'description': description,
+                'description': description[:5000],  # Limit description length
                 'skills': skills,
                 'industry': industry
             }
             
+        except requests.exceptions.Timeout:
+            logger.warning(f"Timeout fetching job details from: {job_url[:100]}...")
+            return {'description': 'Timeout fetching details', 'skills': [], 'industry': ''}
         except Exception as e:
-            logger.error(f"Error getting job details: {e}")
-            return {}
+            logger.warning(f"Error getting job details: {e}")
+            return {'description': f'Error: {str(e)}', 'skills': [], 'industry': ''}
 
     def _extract_skills_from_text(self, text):
         """Extract technical skills from job description text"""
@@ -368,20 +385,34 @@ class AdvancedLinkedInScraper:
         
         return sorted(location_counter.items(), key=lambda x: x[1], reverse=True)
 
-    def enrich_jobs_with_details(self, max_details=25):
-        """Enrich jobs with detailed information"""
+    def enrich_jobs_with_details(self, max_details=7):  # Reduced to 7 as requested
+        """Enrich jobs with detailed information - limited to 7"""
         jobs_to_process = min(len(self.jobs_data), max_details)
         logger.info(f"Enriching {jobs_to_process} jobs with details")
         
         successful_details = 0
         for i, job in enumerate(self.jobs_data[:jobs_to_process]):
-            if job.get('url'):
-                logger.info(f"Getting details for job {i+1}/{jobs_to_process}")
-                details = self.get_job_details(job['url'])
-                if details and details.get('description'):
-                    job['details'] = details
-                    successful_details += 1
-                time.sleep(self.rate_limit_delay)
+            try:
+                if job.get('url'):
+                    logger.info(f"Getting details for job {i+1}/{jobs_to_process}")
+                    details = self.get_job_details(job['url'])
+                    if details:
+                        job['details'] = details
+                        if details.get('description') and details['description'] not in ['Timeout fetching details', '']:
+                            successful_details += 1
+                    
+                    # Reduced delay between requests
+                    time.sleep(random.uniform(1, 2))  # Reduced from 2-5 to 1-2
+                    
+                    # Early stopping if taking too long
+                    time_elapsed = (datetime.now() - self.start_time).total_seconds()
+                    if time_elapsed > 60:  # Stop if we've been running for 60+ seconds
+                        logger.info("Stopping job enrichment early to avoid timeout")
+                        break
+                        
+            except Exception as e:
+                logger.error(f"Error enriching job {i+1}: {e}")
+                continue
         
         logger.info(f"Successfully enriched {successful_details} jobs with details")
         return successful_details
@@ -547,9 +578,9 @@ def search_jobs():
         location = request.form.get('location', '').strip()
         
         try:
-            max_results = int(request.form.get('max_results', 50))
+            max_results = int(request.form.get('max_results', 30))  # Reduced from 50
         except (ValueError, TypeError):
-            max_results = 50
+            max_results = 30
             
         use_auth = request.form.get('use_auth') == 'on'
         session_cookie = request.form.get('session_cookie', '').strip()
@@ -564,9 +595,9 @@ def search_jobs():
                 'message': "Please enter job keywords to search."
             })
         
-        # Limit max results for demo
-        if max_results > 50:
-            max_results = 50
+        # Limit max results for stability
+        if max_results > 30:
+            max_results = 30
         
         # Initialize scraper
         scraper = AdvancedLinkedInScraper(
@@ -587,11 +618,12 @@ def search_jobs():
                 'message': "No jobs found. Try different keywords or location."
             })
         
-        # Enrich jobs with details
-        logger.info(f"Enriching {len(jobs)} jobs with details")
-        successful_details = scraper.enrich_jobs_with_details(max_details=min(15, len(jobs)))
+        # Enrich only 7 jobs with details (as requested)
+        max_details = 7  # Fixed to 7 as requested
+        logger.info(f"Enriching {max_details} jobs with details")
+        successful_details = scraper.enrich_jobs_with_details(max_details=max_details)
         
-        # Analyze data
+        # Analyze data (this is fast)
         skills_freq = scraper.analyze_skills_frequency()
         geo_trends = scraper.analyze_geographic_trends()
         
@@ -600,10 +632,10 @@ def search_jobs():
         json_filename = f"linkedin_jobs_{session_id}.json"
         csv_filename = f"linkedin_jobs_{session_id}.csv"
         
-        # Save to database
+        # Save to database (fast operation)
         db_success = scraper.save_to_database(session_id, keywords, location, max_results, use_auth)
         
-        # Save to files
+        # Save to files (fast operation)
         try:
             scraper.save_to_json(json_filename)
             scraper.save_to_csv(csv_filename)
@@ -617,8 +649,8 @@ def search_jobs():
             'message': f"Found {len(jobs)} job listings for '{keywords}' in '{location}'",
             'jobs_count': len(jobs),
             'jobs_with_details': successful_details,
-            'top_skills': skills_freq[:10],
-            'top_locations': geo_trends[:10],
+            'top_skills': skills_freq[:8],  # Reduced from 10
+            'top_locations': geo_trends[:8], # Reduced from 10
             'json_filename': json_filename,
             'csv_filename': csv_filename,
             'db_success': db_success
