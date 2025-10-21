@@ -6,7 +6,7 @@
 
 A full-stack web application that provides data-driven insights into job market trends by analyzing LinkedIn job postings. Discover in-demand skills, geographic hotspots, and market trends to make smarter career decisions.
 
-**🌐 Live Demo: [https://jobintellect.onrender.com](https://jobintellect.onrender.com)**
+**🌐 Live Demo: [https://linkedinjobscraper-qv0u.onrender.com](https://linkedinjobscraper-qv0u.onrender.com)**
 
 ---
 
