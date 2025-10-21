@@ -53,7 +53,7 @@ JobIntellect is a smart job market analytics platform that scrapes LinkedIn job 
 
 ---
 
-## 🛠 Tech Stack
+## Tech Stack
 
 ### **Backend**
 - **Framework**: Flask (Python)
