@@ -81,10 +81,3 @@ JobIntellect is a smart job market analytics platform that scrapes LinkedIn job 
 ### Prerequisites
 - Python 3.11 or higher
 - Git
-
-### Local Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/yourusername/jobintellect.git
-   cd jobintellect
