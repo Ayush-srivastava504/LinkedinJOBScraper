@@ -1,3 +1,4 @@
+max result want 6 only
 import requests
 from bs4 import BeautifulSoup
 import time
@@ -106,18 +107,18 @@ class AdvancedLinkedInScraper:
             logger.info("Session cookie set for authenticated access")
             
         self.jobs_data = []
-        self.rate_limit_delay = random.uniform(2, 4)  # Reduced from 2-5
-        self.request_timeout = 20  # Reduced from 30
-        self.start_time = datetime.now()  # Track start time
+        self.rate_limit_delay = random.uniform(2, 4)
+        self.request_timeout = 20
+        self.start_time = datetime.now()
 
-    def search_jobs_public_api(self, keywords, location=None, max_results=50):
+    def search_jobs_public_api(self, keywords, location=None, max_results=6):  # Changed to 6
         """Search using LinkedIn's public API"""
         logger.info(f"Searching public API for: {keywords} in {location}")
         base_url = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
         params = {'keywords': keywords, 'location': location, 'start': 0}
         
         jobs_collected = 0
-        max_pages = min(max_results // 7, 7)
+        max_pages = min(max_results // 7, 1)  # Reduced pages for 6 results
         
         for page in range(max_pages):
             try:
@@ -152,16 +153,15 @@ class AdvancedLinkedInScraper:
         logger.info(f"Public API search completed. Found {len(self.jobs_data)} jobs")
         return self.jobs_data
 
-    def search_jobs_authenticated(self, keywords, location=None, max_results=50):
+    def search_jobs_authenticated(self, keywords, location=None, max_results=6):  # Changed to 6
         """Search using authenticated session"""
         logger.info(f"Searching with authentication for: {keywords} in {location}")
         
-        # Use the public API but with authenticated session for better access
         base_url = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
         params = {'keywords': keywords, 'location': location, 'start': 0}
         
         jobs_collected = 0
-        max_pages = min(max_results // 7, 7)
+        max_pages = min(max_results // 7, 1)  # Reduced pages for 6 results
         
         for page in range(max_pages):
             try:
@@ -213,7 +213,6 @@ class AdvancedLinkedInScraper:
             link_elem = card.find('a', class_='base-card__full-link')
             job_url = link_elem['href'] if link_elem else None
             
-            # Clean URL
             if job_url and '?' in job_url:
                 job_url = job_url.split('?')[0]
             
@@ -251,7 +250,6 @@ class AdvancedLinkedInScraper:
             link_elem = card.find('a', class_='base-card__full-link')
             job_url = link_elem['href'] if link_elem else None
             
-            # Clean URL and make it full URL if relative
             if job_url:
                 if '?' in job_url:
                     job_url = job_url.split('?')[0]
@@ -283,15 +281,13 @@ class AdvancedLinkedInScraper:
                 
             logger.info(f"Fetching job details from: {job_url[:100]}...")
             
-            # Set shorter timeout for job details
-            detail_timeout = 15  # 15 seconds max per job detail
+            detail_timeout = 15
             
             response = self.session.get(job_url, timeout=detail_timeout)
             response.raise_for_status()
             
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Get job description with multiple fallback selectors
             description = ""
             description_selectors = [
                 'div.description__text',
@@ -308,18 +304,16 @@ class AdvancedLinkedInScraper:
                     if description:
                         break
             
-            # If still no description, try to get any text content
             if not description:
                 main_content = soup.find('main') or soup.find('body')
                 if main_content:
-                    # Get text but limit length
                     description = main_content.get_text(separator='\n').strip()[:2000]
             
             skills = self._extract_skills_from_text(description)
             industry = self._extract_industry(soup)
             
             return {
-                'description': description[:5000],  # Limit description length
+                'description': description[:5000],
                 'skills': skills,
                 'industry': industry
             }
@@ -385,8 +379,8 @@ class AdvancedLinkedInScraper:
         
         return sorted(location_counter.items(), key=lambda x: x[1], reverse=True)
 
-    def enrich_jobs_with_details(self, max_details=7):  # Reduced to 7 as requested
-        """Enrich jobs with detailed information - limited to 7"""
+    def enrich_jobs_with_details(self, max_details=6):  # Changed to 6
+        """Enrich jobs with detailed information - limited to 6"""
         jobs_to_process = min(len(self.jobs_data), max_details)
         logger.info(f"Enriching {jobs_to_process} jobs with details")
         
@@ -401,12 +395,10 @@ class AdvancedLinkedInScraper:
                         if details.get('description') and details['description'] not in ['Timeout fetching details', '']:
                             successful_details += 1
                     
-                    # Reduced delay between requests
-                    time.sleep(random.uniform(1, 2))  # Reduced from 2-5 to 1-2
+                    time.sleep(random.uniform(1, 2))
                     
-                    # Early stopping if taking too long
                     time_elapsed = (datetime.now() - self.start_time).total_seconds()
-                    if time_elapsed > 60:  # Stop if we've been running for 60+ seconds
+                    if time_elapsed > 60:
                         logger.info("Stopping job enrichment early to avoid timeout")
                         break
                         
@@ -423,7 +415,6 @@ class AdvancedLinkedInScraper:
             conn = get_db_connection()
             cursor = conn.cursor()
             
-            # Check if session already exists
             cursor.execute("SELECT id FROM search_sessions WHERE id = ?", (session_id,))
             existing_session = cursor.fetchone()
             
@@ -432,7 +423,6 @@ class AdvancedLinkedInScraper:
                 conn.close()
                 return True
             
-            # Save search session
             cursor.execute('''
                 INSERT INTO search_sessions (id, keywords, location, max_results, use_auth, searched_at, total_jobs)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -442,10 +432,8 @@ class AdvancedLinkedInScraper:
             jobs_saved = 0
             skills_saved = 0
             
-            # Save jobs and skills
             for job_index, job in enumerate(self.jobs_data):
                 try:
-                    # Prepare data
                     title = job.get('title', '')[:1000]
                     company = job.get('company', '')[:500]
                     job_location = job.get('location', '')[:500]
@@ -464,7 +452,6 @@ class AdvancedLinkedInScraper:
                     description = job.get('details', {}).get('description', '')[:65000]
                     industry = job.get('details', {}).get('industry', '')[:500]
                     
-                    # Insert job
                     cursor.execute('''
                         INSERT INTO jobs (session_id, title, company, location, url, post_date, scraped_at, source, description, industry)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -473,7 +460,6 @@ class AdvancedLinkedInScraper:
                     job_id = cursor.lastrowid
                     jobs_saved += 1
                     
-                    # Save skills
                     if 'details' in job and 'skills' in job['details']:
                         for skill in job['details']['skills']:
                             if skill and len(skill) <= 255:
@@ -549,7 +535,6 @@ class AdvancedLinkedInScraper:
         
         logger.info(f"Saved {len(self.jobs_data)} jobs to {filename}")
 
-# Error handlers for better JSON responses
 @app.errorhandler(500)
 def internal_error(error):
     logger.error(f"500 error: {error}")
@@ -565,7 +550,6 @@ def not_found(error):
         'message': 'Endpoint not found'
     }), 404
 
-# Flask Routes
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -573,31 +557,28 @@ def index():
 @app.route('/search', methods=['POST'])
 def search_jobs():
     try:
-        # Get form data with safe defaults
         keywords = request.form.get('keywords', '').strip()
         location = request.form.get('location', '').strip()
         
         try:
-            max_results = int(request.form.get('max_results', 30))  # Reduced from 50
+            max_results = int(request.form.get('max_results', 6))  # Changed default to 6
         except (ValueError, TypeError):
-            max_results = 30
+            max_results = 6
             
+        # Force max_results to be 6 regardless of user input
+        max_results = 6
+        
         use_auth = request.form.get('use_auth') == 'on'
         session_cookie = request.form.get('session_cookie', '').strip()
         
         logger.info(f"Search request received - Keywords: '{keywords}', Location: '{location}'")
         
-        # Input validation
         if not keywords:
             logger.warning("Empty keywords received")
             return jsonify({
                 'success': False,
                 'message': "Please enter job keywords to search."
             })
-        
-        # Limit max results for stability
-        if max_results > 30:
-            max_results = 30
         
         # Initialize scraper
         scraper = AdvancedLinkedInScraper(
@@ -618,12 +599,12 @@ def search_jobs():
                 'message': "No jobs found. Try different keywords or location."
             })
         
-        # Enrich only 7 jobs with details (as requested)
-        max_details = 7  # Fixed to 7 as requested
+        # Enrich only 6 jobs with details
+        max_details = 6
         logger.info(f"Enriching {max_details} jobs with details")
         successful_details = scraper.enrich_jobs_with_details(max_details=max_details)
         
-        # Analyze data (this is fast)
+        # Analyze data
         skills_freq = scraper.analyze_skills_frequency()
         geo_trends = scraper.analyze_geographic_trends()
         
@@ -632,16 +613,15 @@ def search_jobs():
         json_filename = f"linkedin_jobs_{session_id}.json"
         csv_filename = f"linkedin_jobs_{session_id}.csv"
         
-        # Save to database (fast operation)
+        # Save to database
         db_success = scraper.save_to_database(session_id, keywords, location, max_results, use_auth)
         
-        # Save to files (fast operation)
+        # Save to files
         try:
             scraper.save_to_json(json_filename)
             scraper.save_to_csv(csv_filename)
         except Exception as file_error:
             logger.error(f"File save error: {file_error}")
-            # Continue even if file save fails
         
         # Prepare response data
         response_data = {
@@ -649,8 +629,8 @@ def search_jobs():
             'message': f"Found {len(jobs)} job listings for '{keywords}' in '{location}'",
             'jobs_count': len(jobs),
             'jobs_with_details': successful_details,
-            'top_skills': skills_freq[:8],  # Reduced from 10
-            'top_locations': geo_trends[:8], # Reduced from 10
+            'top_skills': skills_freq[:6],  # Show top 6 skills
+            'top_locations': geo_trends[:6], # Show top 6 locations
             'json_filename': json_filename,
             'csv_filename': csv_filename,
             'db_success': db_success
@@ -696,19 +676,15 @@ def database_admin():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get total jobs count
         cursor.execute('SELECT COUNT(*) as count FROM jobs')
         total_jobs = cursor.fetchone()[0]
         
-        # Get total search sessions
         cursor.execute('SELECT COUNT(*) as count FROM search_sessions')
         total_sessions = cursor.fetchone()[0]
         
-        # Get total unique skills
         cursor.execute('SELECT COUNT(DISTINCT skill) as count FROM job_skills')
         total_skills = cursor.fetchone()[0]
         
-        # Get recent search sessions
         cursor.execute('''
             SELECT id, keywords, location, searched_at, total_jobs 
             FROM search_sessions 
@@ -748,11 +724,7 @@ def test_endpoint():
     })
 
 if __name__ == "__main__":
-    # Initialize database
     init_database()
-    
-    # Get port from environment variable (Render sets this)
     port = int(os.environ.get('PORT', 5000))
-    
     logger.info("Starting JobIntellect Analytics application on Render")
     app.run(host='0.0.0.0', port=port, debug=False)
