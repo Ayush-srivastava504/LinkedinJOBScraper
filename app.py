@@ -118,7 +118,7 @@ class AdvancedLinkedInScraper:
         params = {'keywords': keywords, 'location': location, 'start': 0}
         
         jobs_collected = 0
-        max_pages = min(max_results // 7, 1)  # Reduced pages for 6 results
+        max_pages = min(max_results // 6, 10)  # Reduced pages for 6 results
         
         for page in range(max_pages):
             try:
@@ -161,11 +161,11 @@ class AdvancedLinkedInScraper:
         params = {'keywords': keywords, 'location': location, 'start': 0}
         
         jobs_collected = 0
-        max_pages = min(max_results // 7, 1)  # Reduced pages for 6 results
+        max_pages = min(max_results // 6, 10)  # Reduced pages for 6 results
         
         for page in range(max_pages):
             try:
-                params['start'] = page * 7
+                params['start'] = page * 6
                 logger.info(f"Fetching authenticated page {page + 1}")
                 
                 response = self.session.get(base_url, params=params, timeout=self.request_timeout)
