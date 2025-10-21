@@ -1,4 +1,3 @@
-max result want 6 only
 import requests
 from bs4 import BeautifulSoup
 import time
@@ -111,14 +110,14 @@ class AdvancedLinkedInScraper:
         self.request_timeout = 20
         self.start_time = datetime.now()
 
-    def search_jobs_public_api(self, keywords, location=None, max_results=6):  # Changed to 6
+    def search_jobs_public_api(self, keywords, location=None, max_results=7):  # Changed to 6
         """Search using LinkedIn's public API"""
         logger.info(f"Searching public API for: {keywords} in {location}")
         base_url = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
         params = {'keywords': keywords, 'location': location, 'start': 0}
         
         jobs_collected = 0
-        max_pages = min(max_results // 6, 10)  # Reduced pages for 6 results
+        max_pages = min(max_results // 7, 10)  # Reduced pages for 6 results
         
         for page in range(max_pages):
             try:
@@ -161,7 +160,7 @@ class AdvancedLinkedInScraper:
         params = {'keywords': keywords, 'location': location, 'start': 0}
         
         jobs_collected = 0
-        max_pages = min(max_results // 6, 10)  # Reduced pages for 6 results
+        max_pages = min(max_results // 7, 10)  # Reduced pages for 6 results
         
         for page in range(max_pages):
             try:
@@ -561,12 +560,12 @@ def search_jobs():
         location = request.form.get('location', '').strip()
         
         try:
-            max_results = int(request.form.get('max_results', 6))  # Changed default to 6
+            max_results = int(request.form.get('max_results', 7))  # Changed default to 6
         except (ValueError, TypeError):
-            max_results = 6
+            max_results = 7
             
         # Force max_results to be 6 regardless of user input
-        max_results = 6
+        max_results = 7
         
         use_auth = request.form.get('use_auth') == 'on'
         session_cookie = request.form.get('session_cookie', '').strip()
@@ -600,7 +599,7 @@ def search_jobs():
             })
         
         # Enrich only 6 jobs with details
-        max_details = 6
+        max_details = 7
         logger.info(f"Enriching {max_details} jobs with details")
         successful_details = scraper.enrich_jobs_with_details(max_details=max_details)
         
